@@ -157,11 +157,7 @@ namespace ml
 			clear();
 
 			if (m_begin != static_begin_ptr())
-			{
-				m_alloc.free(m_begin);
-
-				m_dynamic_data = nullptr;
-
+			{				
 				m_begin = static_begin_ptr();
 			}
 
@@ -442,7 +438,7 @@ namespace ml
 
 		}
 
-		// modifiers
+
 		void clear() noexcept
 		{
 
@@ -503,7 +499,7 @@ namespace ml
 
 		iterator erase(const_iterator first, const_iterator last)
 		{
-		//	assert(first > last);
+			assert(first < last);
 			return shrink_at(first, last - first);
 		}
 
@@ -516,8 +512,7 @@ namespace ml
 
 		void pop_back()
 		{
-			// shrink_at(m_end - 1, 1);
-			//assert(m_end > m_begin);
+			assert(m_end > m_begin);
 			m_end = m_end - 1;
 		}
 
@@ -540,14 +535,13 @@ namespace ml
 				memcpy(new_buf, m_begin, byte_size());
 
 				if (m_begin != static_begin_ptr())
-				{
-					if (m_begin == m_dynamic_data)
-					{
-						m_alloc.free(m_dynamic_data);
-						m_dynamic_data = nullptr;
-					}
+				{				
+					
+					//m_alloc.free(m_begin);				
+					//m_dynamic_data = nullptr;
+					//m_dynamic_capacity = 0;
 				}
-
+				
 
 
 				if (new_buf == static_begin_ptr())
@@ -587,7 +581,7 @@ namespace ml
 		{
 			auto position = const_cast<T*>(cp);
 
-			//assert(position < m_begin || position > m_end);
+			assert(!( position < m_begin || position > m_end));
 
 			auto offset = cp - m_begin;
 			const auto s = size();
@@ -615,6 +609,7 @@ namespace ml
 
 				if (m_begin != static_begin_ptr())
 				{
+					//deallocate old memory
 					m_alloc.free(m_begin);
 				}
 
@@ -631,7 +626,7 @@ namespace ml
 		{
 			auto position = const_cast<T*>(cp);
 
-			//assert(position < m_begin || position > m_end || position + num > m_end);
+			assert(!(position < m_begin || position > m_end || position + num > m_end) );
 
 			const auto s = size();
 			if (s - num == 0)
@@ -742,6 +737,7 @@ namespace ml
 					while (m_dynamic_capacity < desired_capacity)
 					{
 						m_dynamic_capacity *= 2;
+						
 					}
 					m_dynamic_data = pointer(m_alloc.malloc(sizeof(value_type)*m_dynamic_capacity));
 					return m_dynamic_data;
@@ -769,7 +765,7 @@ namespace ml
 					if (desired_capacity > m_dynamic_capacity)
 					{
 						// we need to allocate more
-						// we don't have anything to destroy, so we can also deallocate the buffer
+
 						if (m_dynamic_data)
 						{
 							m_alloc.free(m_dynamic_data);
@@ -777,6 +773,9 @@ namespace ml
 						}
 
 						m_dynamic_capacity = desired_capacity;
+						//add a little more
+						m_dynamic_capacity += 4;
+
 						m_dynamic_data = pointer(m_alloc.malloc(sizeof(value_type)*m_dynamic_capacity));
 					}
 
