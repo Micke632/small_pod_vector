@@ -1,17 +1,19 @@
 
+// ml-small_pod_vector v1.00
+
 #pragma once
 
 #include <type_traits>
 #include <cstddef>
 #include <memory>
-
+#include <assert.h>
 
 namespace ml
 {
 
 	namespace impl
 	{
-		class pod_allocator2
+		class pod_allocator
 		{
 		public:
 			using size_type = size_t;
@@ -21,12 +23,12 @@ namespace ml
 		};
 	}
 
-	template<typename T, size_t StaticCapacity = 16, size_t RevertToStaticSize = 0, class Alloc = impl::pod_allocator2>
+	template<typename T, size_t StaticCapacity = 16, size_t RevertToStaticSize = 0, class Alloc = impl::pod_allocator>
 	class small_pod_vector
 	{
-		static_assert(RevertToStaticSize <= StaticCapacity + 1, "itlib::small_pod_vector: the revert-to-static size shouldn't exceed the static capacity by more than one");
+		static_assert(RevertToStaticSize <= StaticCapacity + 1, "ml::small_pod_vector: the revert-to-static size shouldn't exceed the static capacity by more than one");
 
-		static_assert(std::is_trivial<T>::value, "itlib::small_pod_vector with non-trivial type");
+		static_assert(std::is_trivial<T>::value, "ml::small_pod_vector with non-trivial type");
 
 
 	public:
@@ -94,15 +96,14 @@ namespace ml
 			if (v.size() > StaticCapacity)
 			{
 				m_dynamic_capacity = v.size();
-				m_begin = m_end = m_dynamic_data = pointer(m_alloc.malloc(sizeof(value_type)*m_dynamic_capacity));
+				m_begin = m_dynamic_data = pointer(m_alloc.malloc(sizeof(value_type)*m_dynamic_capacity));
 				m_capacity = v.size();
 			}
 			else
 			{
-				m_begin = m_end = static_begin_ptr();
+				m_begin = static_begin_ptr();
 				m_capacity = StaticCapacity;
 			}
-
 
 			memcpy(m_begin, v.m_begin, v.byte_size());
 
@@ -157,7 +158,7 @@ namespace ml
 			clear();
 
 			if (m_begin != static_begin_ptr())
-			{				
+			{
 				m_begin = static_begin_ptr();
 			}
 
@@ -168,7 +169,6 @@ namespace ml
 
 			m_begin = buff;
 			m_end = m_begin + v.size();
-
 
 			update_capacity();
 
@@ -232,12 +232,13 @@ namespace ml
 		}
 
 		const_reference at(size_type i) const
-		{		
+		{
+			assert(i >= m_begin && i < m_end);
 			return *(m_begin + i);
 		}
 
 		reference at(size_type i)
-		{		
+		{
 			return *(m_begin + i);
 		}
 
@@ -352,8 +353,6 @@ namespace ml
 			return m_end - m_begin;
 		}
 
-
-
 		size_t byte_size() const noexcept
 		{
 			return sizeof(value_type) * size();
@@ -375,9 +374,7 @@ namespace ml
 				return;
 			}
 
-
-			memcpy(new_buf, m_begin, m_capacity * sizeof(T));
-
+			memcpy(new_buf, m_begin, m_capacity * sizeof(value_type));
 
 			if (m_begin != static_begin_ptr())
 			{
@@ -390,7 +387,7 @@ namespace ml
 			m_capacity = m_dynamic_capacity;
 		}
 
-		size_t capacity() const noexcept
+		constexpr size_t capacity() const noexcept
 		{
 			return m_capacity;
 		}
@@ -410,7 +407,7 @@ namespace ml
 
 				m_capacity = StaticCapacity;
 
-				memcpy(m_begin, m_dynamic_data, m_capacity * sizeof(T));
+				memcpy(m_begin, m_dynamic_data, m_capacity * sizeof(value_type));
 
 				m_end = m_begin + s;
 
@@ -441,8 +438,6 @@ namespace ml
 
 		void clear() noexcept
 		{
-
-
 			if (RevertToStaticSize > 0)
 			{
 				m_begin = m_end = static_begin_ptr();
@@ -452,8 +447,6 @@ namespace ml
 			{
 				m_end = m_begin;
 			}
-
-
 
 		}
 
@@ -499,7 +492,7 @@ namespace ml
 
 		iterator erase(const_iterator first, const_iterator last)
 		{
-			assert(first < last);
+			assert(first <= last);
 			return shrink_at(first, last - first);
 		}
 
@@ -517,45 +510,12 @@ namespace ml
 		}
 
 
+		//todo: implement full functionality. 
+		//But perhaps this is not needed for this container.
 		void resize(size_type n)
 		{
-			auto new_buf = choose_data(n);
-
-			if (new_buf == m_begin)
-			{
-
-				reserve(n);
-
-				m_end = m_begin + n;
-			}
-			else
-			{
-				// we need to transfer the elements into the new buffer
-
-				memcpy(new_buf, m_begin, byte_size());
-
-				if (m_begin != static_begin_ptr())
-				{				
-					
-					//m_alloc.free(m_begin);				
-					//m_dynamic_data = nullptr;
-					//m_dynamic_capacity = 0;
-				}
-				
-
-
-				if (new_buf == static_begin_ptr())
-				{
-					m_capacity = StaticCapacity;
-				}
-				else
-				{
-					m_capacity = m_dynamic_capacity;
-				}
-
-				m_begin = new_buf;
-				m_end = new_buf + n;
-			}
+			assert(n <= StaticCapacity);
+			m_end = m_begin + n;
 		}
 
 	private:
@@ -564,7 +524,6 @@ namespace ml
 		static void copy_not_aliased(T* p, const T* begin, const T* end)
 		{
 			auto s = size_t(end - begin) * sizeof(T);
-			if (s == 0) return;
 			std::memcpy(p, begin, s);
 		}
 
@@ -581,20 +540,17 @@ namespace ml
 		{
 			auto position = const_cast<T*>(cp);
 
-			assert(!( position < m_begin || position > m_end));
+			assert(!(position < m_begin || position > m_end));
 
-			auto offset = cp - m_begin;
+			const auto offset = cp - m_begin;
 			const auto s = size();
 			auto new_buf = choose_data(s + num);
 
 			if (new_buf == m_begin)
 			{
-
-				std::memmove(m_begin + offset + num, m_begin + offset, (s - offset) * sizeof(T));
-
+				std::memmove(m_begin + offset + num, m_begin + offset, (s - offset) * sizeof(value_type));
 				m_end = m_begin + s + num;
 				return m_begin + offset;
-
 			}
 			else
 			{
@@ -602,10 +558,9 @@ namespace ml
 
 				position = new_buf + (position - m_begin);
 
+				memcpy(new_buf, m_begin, m_capacity * sizeof(value_type));
 
-				memcpy(new_buf, m_begin, m_capacity * sizeof(T));
-
-				std::memmove(new_buf + offset + num, new_buf + offset, (s - offset) * sizeof(T));
+				std::memmove(new_buf + offset + num, new_buf + offset, (s - offset) * sizeof(value_type));
 
 				if (m_begin != static_begin_ptr())
 				{
@@ -626,24 +581,17 @@ namespace ml
 		{
 			auto position = const_cast<T*>(cp);
 
-			assert(!(position < m_begin || position > m_end || position + num > m_end) );
+			assert(!(position < m_begin || position > m_end || position + num > m_end));
 
 			const auto s = size();
-			if (s - num == 0)
-			{
-				clear();
-				return m_end;
-			}
 
 			auto new_buf = choose_data(s - num);
 
 			if (new_buf == m_begin)
 			{
-
 				std::memmove(position, position + num, size_t(m_end - position - num) * sizeof(T));
 
 				m_end -= num;
-				return position;
 			}
 			else
 			{
@@ -655,15 +603,18 @@ namespace ml
 
 				memcpy(new_buf, m_begin, byte_size());
 
-				auto offset = cp - m_begin;
+				auto offset = position - m_begin;
 
-				std::memmove(new_buf + offset + num, new_buf + offset, (s - offset) * sizeof(T));
+				std::memmove(new_buf + offset, new_buf + offset + num, (s - offset) * sizeof(T));
+
+				position = new_buf + offset;
 
 				m_begin = new_buf;
-				m_end = new_buf + s - num;
+				m_end = new_buf + (s - num);
+
 			}
 
-			return ++position;
+			return position;
 		}
 
 		void assign_impl(size_type count, const T& value)
@@ -688,12 +639,11 @@ namespace ml
 			assert(m_begin);
 			assert(m_begin == m_end);
 
-			m_begin = m_end = choose_data(last - first);
-			for (auto p = first; p != last; ++p)
-			{
-				*m_end = *p;
-				++m_end;
-			}
+			m_begin = choose_data(last - first);
+
+			copy_not_aliased(m_begin, first, last);
+
+			m_end = m_begin + (last - first);
 
 			update_capacity();
 		}
@@ -703,26 +653,19 @@ namespace ml
 			assert(m_begin);
 			assert(m_begin == m_end);
 
-			m_begin = m_end = choose_data(ilist.size());
-			for (auto& elem : ilist)
-			{
-				*m_end = elem;
-				++m_end;
-			}
+			m_begin = choose_data(ilist.size());
+
+			copy_not_aliased(m_begin, ilist.begin(), ilist.end());
+
+			m_end = m_begin + ilist.size();
 
 			update_capacity();
 		}
 
 		void update_capacity()
 		{
-			if (m_begin == static_begin_ptr())
-			{
-				m_capacity = StaticCapacity;
-			}
-			else
-			{
-				m_capacity = m_dynamic_capacity;
-			}
+			m_capacity = m_begin == static_begin_ptr() ? StaticCapacity : m_dynamic_capacity;
+
 		}
 
 		T* choose_data(size_t desired_capacity)
@@ -737,7 +680,7 @@ namespace ml
 					while (m_dynamic_capacity < desired_capacity)
 					{
 						m_dynamic_capacity *= 2;
-						
+
 					}
 					m_dynamic_data = pointer(m_alloc.malloc(sizeof(value_type)*m_dynamic_capacity));
 					return m_dynamic_data;
@@ -769,7 +712,6 @@ namespace ml
 						if (m_dynamic_data)
 						{
 							m_alloc.free(m_dynamic_data);
-							m_dynamic_data = nullptr;
 						}
 
 						m_dynamic_capacity = desired_capacity;
