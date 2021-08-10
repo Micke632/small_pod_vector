@@ -81,7 +81,7 @@ namespace ml
 		}
 
 		small_pod_vector(std::initializer_list<T> l, const Alloc& alloc = Alloc())
-			: small_static_vector(alloc)
+			: small_pod_vector(alloc)
 		{
 			assign_impl(l);
 		}
@@ -233,12 +233,13 @@ namespace ml
 
 		const_reference at(size_type i) const
 		{
-			assert(i >= m_begin && i < m_end);
+			assert(i < size());
 			return *(m_begin + i);
 		}
 
 		reference at(size_type i)
 		{
+			assert(i < size());
 			return *(m_begin + i);
 		}
 
@@ -502,6 +503,7 @@ namespace ml
 			*pos = val;
 		}
 
+		
 
 		void pop_back()
 		{
