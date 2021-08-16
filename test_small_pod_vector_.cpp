@@ -120,6 +120,45 @@ TEST(TestCaseName, smallpod)
 
 
 	}
+	
+	{
+
+		ml::small_pod_vector<int, 4,3> vec2(5);
+
+		{
+
+			EXPECT_EQ(vec2.size(), 5);
+
+		}
+
+		vec2.resize(2);
+
+		{
+		
+			EXPECT_EQ(vec2.size(), 2);
+
+		}
+
+
+		vec2[0] = 1;
+		vec2[1] = 2;
+		vec2.push_back(7);
+		vec2.push_back(8);
+		vec2.push_back(9);
+
+		{
+
+
+			int ints[] = { 1,2,7,8,9 };
+
+			EXPECT_EQ(vec2.size(), 5);
+
+			EXPECT_EQ(memcmp(vec2.data(), ints, sizeof(ints)), 0);
+
+
+		}
+
+	}
 }
 
 

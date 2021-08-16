@@ -1,6 +1,12 @@
 
 // ml-small_pod_vector v1.00
 
+
+//                  VERSION HISTORY
+//
+//  1.00 Initial version
+//  1.01 implemented resize()
+
 #pragma once
 
 #include <type_traits>
@@ -379,8 +385,8 @@ namespace ml
 
 			if (m_begin != static_begin_ptr())
 			{
+				assert(m_begin != m_dynamic_data);
 				m_alloc.free(m_begin);
-
 			}
 
 			m_begin = new_buf;
@@ -412,8 +418,10 @@ namespace ml
 
 				m_end = m_begin + s;
 
+				//deallocate memory. 				
 				m_alloc.free(m_dynamic_data);
 				m_dynamic_data = nullptr;
+				m_dynamic_capacity = 0;
 			}
 			else
 			{
@@ -503,7 +511,7 @@ namespace ml
 			*pos = val;
 		}
 
-		
+
 
 		void pop_back()
 		{
@@ -512,12 +520,37 @@ namespace ml
 		}
 
 
-		//todo: implement full functionality. 
-		//But perhaps this is not needed for this container.
 		void resize(size_type n)
 		{
-			assert(n <= StaticCapacity);
-			m_end = m_begin + n;
+			auto new_buf = choose_data(n);
+
+			if (new_buf == m_begin)
+			{
+				reserve(n);
+
+				m_end = m_begin + n;
+			}
+			else
+			{
+				// we need to transfer the elements into the new buffer
+
+				memcpy(new_buf, m_begin, m_capacity * sizeof(value_type));
+
+				if (m_begin != static_begin_ptr())
+				{
+					if (new_buf != static_begin_ptr())
+					{
+						assert(m_begin != m_dynamic_data);
+						m_alloc.free(m_begin);
+					}
+
+				}
+				update_capacity();
+
+				m_begin = new_buf;
+				m_end = new_buf + n;
+			}
+
 		}
 
 	private:
@@ -567,6 +600,7 @@ namespace ml
 				if (m_begin != static_begin_ptr())
 				{
 					//deallocate old memory
+					assert(m_begin != m_dynamic_data);
 					m_alloc.free(m_begin);
 				}
 
@@ -625,6 +659,7 @@ namespace ml
 			assert(m_begin == m_end);
 
 			m_begin = m_end = choose_data(count);
+
 			for (size_type i = 0; i < count; ++i)
 			{
 				*m_end = value;
